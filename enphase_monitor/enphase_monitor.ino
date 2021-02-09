@@ -9,15 +9,18 @@
 #define uS_TO_S_FACTOR 1000000  //Conversion factor for micro seconds to seconds
 #define TIME_TO_SLEEP  300        //Time ESP32 will go to sleep (in seconds)
 
+//Fill in wifi credentials in creds.h
 const char* ssid     = WIFI_SSID;
 const char* password = WIFI_PASSWORD;
 
+//Fill in Enphase credentials in creds.h
 const char* appkey   = APPLICATION_KEY;
 const char* user_id = USER_ID;
 const char* systemid = SYSTEM_ID;
 
-bool debugmode = false;
+bool debugmode = false; //sends data back over serial connection if enabled
 
+//2.9" V2 Waveshare B/W e-paper
 GxEPD2_BW<GxEPD2_290_T94, GxEPD2_290_T94::HEIGHT> display(GxEPD2_290_T94(/*CS=5*/ SS, /*DC=*/ 17, /*RST=*/ 16, /*BUSY=*/ 4)); // GDEM029T94
  
 void setup() {
@@ -25,7 +28,7 @@ void setup() {
   Serial.begin(115200);
   delay(1000);
   display.init();
-  setupDisplay(0,0,"");
+  updateData(0,0,"","starting up.....",true);
   display.hibernate();
 }
  
@@ -65,7 +68,8 @@ void loop() {
  
   Serial.println("Connected to the WiFi network");
   
-  if ((WiFi.status() == WL_CONNECTED)) { //Check the current connection status
+  if ((WiFi.status() == WL_CONNECTED)) //Check the current connection status
+  { 
  
     HTTPClient http;
     String url = "https://api.enphaseenergy.com/api/v2/systems/";
@@ -89,7 +93,6 @@ void loop() {
         //String payload = http.getString();
         Serial.print("HTTP Code: ");
         Serial.println(httpCode);
-        //Serial.println(payload);
 
         DynamicJsonDocument doc(512);
         if(debugmode)
@@ -103,24 +106,24 @@ void loop() {
           deserializeJson(doc, http.getStream());
         }
         // Read values
-        long system_id = doc["system_id"]; // 
-        int modules = doc["modules"]; // 
-        int size_w = doc["size_w"]; // 
+        //long system_id = doc["system_id"]; // 
+        //int modules = doc["modules"]; // 
+        //int size_w = doc["size_w"]; // 
         int current_power = doc["current_power"]; // 
         int energy_today = doc["energy_today"]; // 1
-        long energy_lifetime = doc["energy_lifetime"]; // 
-        const char* summary_date = doc["summary_date"]; // "2021-02-07T00:00:00-08:00"
-        const char* source = doc["source"]; // "microinverters"
+        //long energy_lifetime = doc["energy_lifetime"]; // 
+        //const char* summary_date = doc["summary_date"]; // "2021-02-07T00:00:00-08:00"
+        //const char* source = doc["source"]; // "microinverters"
         const char* status = doc["status"]; // "normal"
-        const char* operational_at = doc["operational_at"]; // "2021-01-12T14:31:35-08:00"
+        //const char* operational_at = doc["operational_at"]; // "2021-01-12T14:31:35-08:00"
         const char* last_report_at = doc["last_report_at"]; // "2021-02-07T19:57:25-08:00"
-        const char* last_interval_end_at = doc["last_interval_end_at"]; // "2021-02-07T17:34:00-08:00"
+        //const char* last_interval_end_at = doc["last_interval_end_at"]; // "2021-02-07T17:34:00-08:00"
         String eng = String(energy_today/1000.000).c_str();
         Serial.println(eng);
         Serial.println(last_report_at);
         String s = last_report_at;
         s = s.substring(0,s.length()-6); //Removing timezone from time string
-        updateData(current_power,energy_today,status,s.c_str());
+        updateData(current_power,energy_today,status,s.c_str(),false);
       }
  
     else {
@@ -128,6 +131,7 @@ void loop() {
     }
  
     http.end(); //Free the resources
+    WiFi.disconnect();
   }
   else
   {
@@ -136,37 +140,55 @@ void loop() {
     ESP.restart();
   }
 
-  WiFi.disconnect();
-
+  //Use light sleep to start back at the top of the loop code
+  //otherwise the screen init would happen and flash
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
   esp_light_sleep_start();
  
 }
-void updateData(int current_power, int energy_today,const char* statusstr, const char* timestr)
+void updateData(int current_power, int energy_today,const char* statusstr, const char* timestr, bool fullRefresh)
 {
-  //const char* norm = "normal;
+  //We need to define some of the strings that show
   char disp_kwh_curr[10] = "Current: ";
   char disp_kwh_today[10] = "Total:   ";
   char disp_status[9] = "Status: ";
+
+  //Take convert to kilowatts
   char kwh_current[15];
   dtostrf((float(current_power)/1000.000),6,3,kwh_current);
   char kwh_today[15];
   dtostrf((float(energy_today)/1000.000),6,3,kwh_today);
+
+  //Rotate on side, set font and color
   display.setRotation(1);
   display.setFont(&FreeMonoBold12pt7b);
   display.setTextColor(GxEPD_BLACK);
-  int16_t tbx, tby; uint16_t tbw, tbh;
 
+  //Calculate starting positions
+  int16_t tbx, tby; uint16_t tbw, tbh;
   uint16_t data_start_x, line1_height, currdata_len, status_x;    
   display.getTextBounds(disp_kwh_curr, 0, 0, &tbx, &tby, &data_start_x, &line1_height);
   display.getTextBounds(kwh_current, 0, 0, &tbx, &tby, &currdata_len, &line1_height);
   display.getTextBounds(disp_status, 0, 0, &tbx, &tby, &status_x, &line1_height);
 
+  if(fullRefresh)
+  {
+    display.setFullWindow();
+  }
+  
   display.firstPage();
   do
   {
+    if(fullRefresh)
+    {
+      display.fillScreen(GxEPD_WHITE);
+    }
+    else
+    {
+      display.setPartialWindow(0,0,296,128);
+    }
+    
     //line 1
-    display.setPartialWindow(0,0,296,128);
     display.setCursor(0, line1_height);
     display.print(disp_kwh_curr);
     display.setCursor(data_start_x, line1_height);
@@ -193,55 +215,4 @@ void updateData(int current_power, int energy_today,const char* statusstr, const
 
   display.hibernate();
 
-}
-
-void setupDisplay(int current_power, int energy_today, String statusstr)
-{
-  char disp_kwh_curr[10] = "Current: ";
-  char disp_kwh_today[10] = "Total:   ";
-  char disp_status[9] = "Status: ";
-  char kwh_current[15];
-  dtostrf((float(current_power)/1000.000),6,3,kwh_current);
-  char kwh_today[15];
-  dtostrf((float(energy_today)/1000.000),6,3,kwh_today);
-  display.setRotation(1);
-  display.setFont(&FreeMonoBold12pt7b);
-  display.setTextColor(GxEPD_BLACK);
-  int16_t tbx, tby; uint16_t tbw, tbh;
-
-  uint16_t data_start_x, line1_height, currdata_len, status_x;  
-  display.getTextBounds(disp_kwh_curr, 0, 0, &tbx, &tby, &data_start_x, &line1_height);
-  display.getTextBounds(kwh_current, 0, 0, &tbx, &tby, &currdata_len, &line1_height);
-  display.getTextBounds(disp_status, 0, 0, &tbx, &tby, &status_x, &line1_height);
-
-  display.setFullWindow();
-  display.firstPage();
-
-  do
-  {
-    //line 1
-    display.fillScreen(GxEPD_WHITE);
-    display.setCursor(0, line1_height);
-    display.print(disp_kwh_curr);
-    display.setCursor(data_start_x, line1_height);
-    display.print(kwh_current);
-    display.setCursor(data_start_x+currdata_len, line1_height);
-    display.print(" kw");
-    //line 2
-    display.setCursor(0, (2*line1_height)+20);
-    display.print(disp_kwh_today);
-    display.setCursor(data_start_x, (2*line1_height)+20);
-    display.print(kwh_today);
-    display.setCursor(data_start_x+currdata_len, (2*line1_height)+20);
-    display.print(" kwh");
-    //line 3
-    display.setCursor(0, 3*line1_height+40);
-    display.print(disp_status);
-    display.setCursor(status_x, 3*line1_height+40);
-    display.print(statusstr.c_str());
-
-    display.setCursor(0, 4*line1_height+60);
-    display.print("starting up.....");
-  }
-  while (display.nextPage());
 }
