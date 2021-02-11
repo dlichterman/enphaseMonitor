@@ -18,7 +18,7 @@ const char* appkey   = APPLICATION_KEY;
 const char* user_id = USER_ID;
 const char* systemid = SYSTEM_ID;
 
-bool debugmode = false; //sends data back over serial connection if enabled
+bool debugmode = true; //sends data back over serial connection if enabled
 
 //2.9" V2 Waveshare B/W e-paper
 GxEPD2_BW<GxEPD2_290_T94, GxEPD2_290_T94::HEIGHT> display(GxEPD2_290_T94(/*CS=5*/ SS, /*DC=*/ 17, /*RST=*/ 16, /*BUSY=*/ 4)); // GDEM029T94
@@ -62,12 +62,12 @@ void loop() {
   WiFi.begin(ssid, password); 
  
   while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
+    delay(1000);
     Serial.println("Connecting to WiFi..");
   }
- 
+  delay(1000);
   Serial.println("Connected to the WiFi network");
-  
+  delay(1000);
   if ((WiFi.status() == WL_CONNECTED)) //Check the current connection status
   { 
  
@@ -137,7 +137,8 @@ void loop() {
   {
     //If not connected, restart to try and connect again.
     Serial.println("No wifi, restarting");
-    ESP.restart();
+    return;
+    //ESP.restart();
   }
 
   //Use light sleep to start back at the top of the loop code
