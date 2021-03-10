@@ -5,6 +5,7 @@
 #include <GxEPD2_BW.h>
 #include <Fonts/FreeMonoBold12pt7b.h>
 #include "creds.h"
+#include "esp_task_wdt.h"
 
 #define uS_TO_S_FACTOR 1000000  //Conversion factor for micro seconds to seconds
 #define TIME_TO_SLEEP  300        //Time ESP32 will go to sleep (in seconds)
@@ -18,13 +19,13 @@ const char* appkey   = APPLICATION_KEY;
 const char* user_id = USER_ID;
 const char* systemid = SYSTEM_ID;
 
-bool debugmode = true; //sends data back over serial connection if enabled
+bool debugmode = false; //sends data back over serial connection if enabled
 
 //2.9" V2 Waveshare B/W e-paper
 GxEPD2_BW<GxEPD2_290_T94, GxEPD2_290_T94::HEIGHT> display(GxEPD2_290_T94(/*CS=5*/ SS, /*DC=*/ 17, /*RST=*/ 16, /*BUSY=*/ 4)); // GDEM029T94
  
 void setup() {
- 
+  esp_task_wdt_init(TIME_TO_SLEEP*2,true);
   Serial.begin(115200);
   delay(1000);
   display.init();
@@ -58,7 +59,7 @@ const char* root_ca= \
 "-----END CERTIFICATE-----\n";
  
 void loop() {
-
+  esp_task_wdt_reset();
   WiFi.begin(ssid, password); 
  
   while (WiFi.status() != WL_CONNECTED) {
@@ -89,41 +90,48 @@ void loop() {
     int httpCode = http.GET();                                                  //Make the request
  
     if (httpCode > 0) { //Check for the returning code
- 
+        
         //String payload = http.getString();
         Serial.print("HTTP Code: ");
         Serial.println(httpCode);
-
-        DynamicJsonDocument doc(512);
-        if(debugmode)
+        if(httpCode == 200)
         {
-          ReadLoggingStream loggingStream(http.getStream(), Serial);
-          Serial.println("");
-          deserializeJson(doc, loggingStream);
+          DynamicJsonDocument doc(512);
+          if(debugmode)
+          {
+            ReadLoggingStream loggingStream(http.getStream(), Serial);
+            Serial.println("");
+            deserializeJson(doc, loggingStream);
+          }
+          else
+          {
+            deserializeJson(doc, http.getStream());
+          }
+          // Read values
+          //long system_id = doc["system_id"]; // 
+          //int modules = doc["modules"]; // 
+          //int size_w = doc["size_w"]; // 
+          int current_power = doc["current_power"]; // 
+          int energy_today = doc["energy_today"]; // 1
+          //long energy_lifetime = doc["energy_lifetime"]; // 
+          //const char* summary_date = doc["summary_date"]; // "2021-02-07T00:00:00-08:00"
+          //const char* source = doc["source"]; // "microinverters"
+          const char* status = doc["status"]; // "normal"
+          //const char* operational_at = doc["operational_at"]; // "2021-01-12T14:31:35-08:00"
+          const char* last_report_at = doc["last_report_at"]; // "2021-02-07T19:57:25-08:00"
+          //const char* last_interval_end_at = doc["last_interval_end_at"]; // "2021-02-07T17:34:00-08:00"
+          String eng = String(energy_today/1000.000).c_str();
+          Serial.println(eng);
+          Serial.println(last_report_at);
+          String s = last_report_at;
+          s = s.substring(0,s.length()-6); //Removing timezone from time string
+          updateData(current_power,energy_today,status,s.c_str(),false);
         }
         else
         {
-          deserializeJson(doc, http.getStream());
+          //So we got an error...... could add additional info later here
         }
-        // Read values
-        //long system_id = doc["system_id"]; // 
-        //int modules = doc["modules"]; // 
-        //int size_w = doc["size_w"]; // 
-        int current_power = doc["current_power"]; // 
-        int energy_today = doc["energy_today"]; // 1
-        //long energy_lifetime = doc["energy_lifetime"]; // 
-        //const char* summary_date = doc["summary_date"]; // "2021-02-07T00:00:00-08:00"
-        //const char* source = doc["source"]; // "microinverters"
-        const char* status = doc["status"]; // "normal"
-        //const char* operational_at = doc["operational_at"]; // "2021-01-12T14:31:35-08:00"
-        const char* last_report_at = doc["last_report_at"]; // "2021-02-07T19:57:25-08:00"
-        //const char* last_interval_end_at = doc["last_interval_end_at"]; // "2021-02-07T17:34:00-08:00"
-        String eng = String(energy_today/1000.000).c_str();
-        Serial.println(eng);
-        Serial.println(last_report_at);
-        String s = last_report_at;
-        s = s.substring(0,s.length()-6); //Removing timezone from time string
-        updateData(current_power,energy_today,status,s.c_str(),false);
+        
       }
  
     else {
