@@ -25,7 +25,8 @@ bool debugmode = false; //sends data back over serial connection if enabled
 GxEPD2_BW<GxEPD2_290_T94, GxEPD2_290_T94::HEIGHT> display(GxEPD2_290_T94(/*CS=5*/ SS, /*DC=*/ 17, /*RST=*/ 16, /*BUSY=*/ 4)); // GDEM029T94
  
 void setup() {
-  esp_task_wdt_init(TIME_TO_SLEEP*2,true);
+  esp_task_wdt_init((30),true); //30 seconds for the device to wake, and make the update
+  esp_task_wdt_add(NULL); //add current thread to WDT watch
   Serial.begin(115200);
   delay(1000);
   display.init();
