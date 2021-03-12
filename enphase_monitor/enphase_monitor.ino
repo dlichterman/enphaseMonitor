@@ -60,12 +60,21 @@ const char* root_ca= \
 "-----END CERTIFICATE-----\n";
  
 void loop() {
+  int wifiTries = 0;
   esp_task_wdt_reset();
+  Serial.println("Reset watchdog");
   WiFi.begin(ssid, password); 
  
   while (WiFi.status() != WL_CONNECTED) {
     delay(1000);
     Serial.println("Connecting to WiFi..");
+    wifiTries++;
+    if(wifiTries > 15)
+    {
+      //if we have tried to connect for 15 seconds, let's just 
+      //restart the loop code because it's probably gonna fail
+      break;
+    }
   }
   delay(1000);
   Serial.println("Connected to the WiFi network");
