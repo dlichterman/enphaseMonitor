@@ -160,7 +160,7 @@ void loop() {
           localtime = uslocaltime.toLocal(utc, &tcr);
           char buf[32];
           memset(buf, 0, sizeof(buf));
-          sprintf(buf, "%d-%d-%2d %2d:%2d",
+          sprintf(buf, "%d-%d-%2d %2d:%02d",
                   year(localtime), month(localtime), day(localtime), hour(localtime), minute(localtime));
           Serial.println(buf);
           updateData(current_power,energy_today,status,buf,false);
