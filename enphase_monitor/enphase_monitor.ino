@@ -1,3 +1,10 @@
+#if (ESP8266 || ESP32)
+#define USE_LITTLEFS      true
+#define USE_SPIFFS        false
+#endif
+#define TIMEZONE_GENERIC_VERSION_MIN_TARGET      "Timezone_Generic v1.9.1"
+#define TIMEZONE_GENERIC_VERSION_MIN             1009001
+
 #include <WiFi.h>
 #include <HTTPClient.h>
 #include <ArduinoJson.h>
@@ -6,6 +13,10 @@
 #include <Fonts/FreeMonoBold12pt7b.h>
 #include "creds.h"
 #include "esp_task_wdt.h"
+#include <base64.h>
+#include <Arduino.h>
+#include <TimeLib.h>
+#include <Timezone_Generic.h>
 
 #define uS_TO_S_FACTOR 1000000  //Conversion factor for micro seconds to seconds
 #define TIME_TO_SLEEP  300        //Time ESP32 will go to sleep (in seconds)
@@ -25,7 +36,7 @@ bool debugmode = false; //sends data back over serial connection if enabled
 GxEPD2_BW<GxEPD2_290_T94, GxEPD2_290_T94::HEIGHT> display(GxEPD2_290_T94(/*CS=5*/ SS, /*DC=*/ 17, /*RST=*/ 16, /*BUSY=*/ 4)); // GDEM029T94
  
 void setup() {
-  esp_task_wdt_init((30),true); //30 seconds for the device to wake, and make the update
+  esp_task_wdt_init((60),true); //30 seconds for the device to wake, and make the update
   esp_task_wdt_add(NULL); //add current thread to WDT watch
   Serial.begin(115200);
   delay(1000);
@@ -81,9 +92,9 @@ void loop() {
   delay(1000);
   if ((WiFi.status() == WL_CONNECTED)) //Check the current connection status
   { 
- 
     HTTPClient http;
-    String url = "https://api.enphaseenergy.com/api/v2/systems/";
+    
+    String url = "https://api.enphaseenergy.com/api/v4/systems/";
     url += systemid;
     url += "/summary?key=";
     url += appkey;
@@ -94,8 +105,14 @@ void loop() {
     {
       Serial.println(url);
     }
-
+    
+    http.setConnectTimeout(10000);
+    http.setTimeout(10000);
     http.useHTTP10(true);
+
+    String auth = base64::encode((String(CLIENT_ID) + ":" + String(CLIENT_SECRET)).c_str());
+    http.addHeader("Authorization", "Basic " + auth);
+    
     http.begin(url, root_ca); //Specify the URL and certificate
     int httpCode = http.GET();                                                  //Make the request
  
@@ -132,10 +149,21 @@ void loop() {
           //const char* last_interval_end_at = doc["last_interval_end_at"]; // "2021-02-07T17:34:00-08:00"
           String eng = String(energy_today/1000.000).c_str();
           Serial.println(eng);
-          Serial.println(last_report_at);
-          String s = last_report_at;
-          s = s.substring(0,s.length()-6); //Removing timezone from time string
-          updateData(current_power,energy_today,status,s.c_str(),false);
+
+          time_t localtime, utc;
+          TimeChangeRule *tcr;
+          TimeChangeRule usPDT = {"PDT", Second, Sun, Mar, 2, -420};  //UTC - 4 hours
+          TimeChangeRule usPST = {"PST", First, Sun, Nov, 2, -480};   //UTC - 5 hours
+          Timezone uslocaltime(usPDT, usPST);
+          
+          utc = doc["last_report_at"];  //current time from the Time Library
+          localtime = uslocaltime.toLocal(utc, &tcr);
+          char buf[32];
+          memset(buf, 0, sizeof(buf));
+          sprintf(buf, "%d-%d-%2d %2d:%2d",
+                  year(localtime), month(localtime), day(localtime), hour(localtime), minute(localtime));
+          Serial.println(buf);
+          updateData(current_power,energy_today,status,buf,false);
         }
         else
         {
@@ -146,6 +174,7 @@ void loop() {
  
     else {
       Serial.println("Error on HTTP request");
+      Serial.println(httpCode);
     }
  
     http.end(); //Free the resources
@@ -161,6 +190,7 @@ void loop() {
 
   //Use light sleep to start back at the top of the loop code
   //otherwise the screen init would happen and flash
+  delay(1000);
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
   esp_light_sleep_start();
  
