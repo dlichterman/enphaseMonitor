@@ -13,13 +13,14 @@
 #include <Fonts/FreeMonoBold12pt7b.h>
 #include "creds.h"
 #include "esp_task_wdt.h"
+#include "esp_wifi.h"
 #include <base64.h>
 #include <Arduino.h>
 #include <TimeLib.h>
 #include <Timezone_Generic.h>
 
 #define uS_TO_S_FACTOR 1000000  //Conversion factor for micro seconds to seconds
-#define TIME_TO_SLEEP  300        //Time ESP32 will go to sleep (in seconds)
+#define TIME_TO_SLEEP  1800        //Time ESP32 will go to sleep (in seconds)
 
 //Fill in wifi credentials in creds.h
 const char* ssid     = WIFI_SSID;
@@ -71,6 +72,7 @@ const char* root_ca= \
 "-----END CERTIFICATE-----\n";
  
 void loop() {
+  esp_wifi_start();
   int wifiTries = 0;
   esp_task_wdt_reset();
   Serial.println("Reset watchdog");
@@ -113,7 +115,8 @@ void loop() {
     String auth = base64::encode((String(CLIENT_ID) + ":" + String(CLIENT_SECRET)).c_str());
     http.addHeader("Authorization", "Basic " + auth);
     
-    http.begin(url, root_ca); //Specify the URL and certificate
+    //http.begin(url, root_ca); //Specify the URL and certificate
+    http.begin(url); //Specify the URL
     int httpCode = http.GET();                                                  //Make the request
  
     if (httpCode > 0) { //Check for the returning code
@@ -191,6 +194,7 @@ void loop() {
   //Use light sleep to start back at the top of the loop code
   //otherwise the screen init would happen and flash
   delay(1000);
+  esp_wifi_stop();
   esp_sleep_enable_timer_wakeup(TIME_TO_SLEEP * uS_TO_S_FACTOR);
   esp_light_sleep_start();
  
