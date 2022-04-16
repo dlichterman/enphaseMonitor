@@ -94,6 +94,46 @@ void loop() {
   delay(1000);
   if ((WiFi.status() == WL_CONNECTED)) //Check the current connection status
   { 
+    //Check time, and if it's dark, let's not update because we're limited now
+    configTime(-7*3600,0,"pool.ntp.org");
+    struct tm time;
+    if(!getLocalTime(&time)){
+    Serial.println("Could not obtain time info");
+    return;
+    }
+    if((time.tm_hour > 19) || (time.tm_hour < 7))
+    {
+      //It's too dark, don't update
+      return;
+    }
+    else
+    {
+      Serial.println("Time ok, getting system info");
+      if(debugmode)
+      {
+          Serial.println("\n---------TIME----------");
+   
+          Serial.print("Number of years since 1900: ");
+          Serial.println(time.tm_year);
+         
+          Serial.print("month, from 0 to 11: ");
+          Serial.println(time.tm_mon);
+         
+          Serial.print("day, from 1 to 31: "); 
+          Serial.println(time.tm_mday);
+         
+          Serial.print("hour, from 0 to 23: ");
+          Serial.println(time.tm_hour);
+         
+          Serial.print("minute, from 0 to 59: ");
+          Serial.println(time.tm_min);
+           
+          Serial.print("second, from 0 to 59: ");
+          Serial.println(time.tm_sec);
+      }
+    }
+
+    
     HTTPClient http;
     
     String url = "https://api.enphaseenergy.com/api/v4/systems/";
